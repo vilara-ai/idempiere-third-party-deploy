@@ -1,0 +1,57 @@
+---
+# idempiere.yml - Ansible variables for iDempiere installation
+# IMPORTANT: Change passwords before production use!
+# Consider using ansible-vault for sensitive values
+
+#############################################################################
+# iDempiere Configuration
+#############################################################################
+idempiere_version: "12"
+idempiere_user: "idempiere"
+idempiere_group: "idempiere"
+idempiere_install_dir: "/opt/idempiere-server"
+idempiere_download_dir: "/home/idempiere/downloads"
+
+# Download URL (SourceForge daily build)
+idempiere_zip_file: "idempiereServer12Daily.gtk.linux.x86_64.zip"
+idempiere_download_url: "https://sourceforge.net/projects/idempiere/files/v12/daily-server/{{ idempiere_zip_file }}"
+
+#############################################################################
+# Web Server Configuration
+#############################################################################
+idempiere_web_port: 8080
+idempiere_ssl_port: 8443
+idempiere_hostname: "{{ ansible_hostname }}"
+
+# Keystore password for SSL (change in production!)
+idempiere_keystore_password: "myPassword"
+
+#############################################################################
+# Database Configuration
+#############################################################################
+db_type: "PostgreSQL"
+db_host: "localhost"
+db_port: 5432
+db_name: "idempiere"
+
+# PostgreSQL admin user (for creating database)
+db_admin_user: "postgres"
+db_admin_password: "postgres"  # CHANGE THIS!
+
+# iDempiere database user
+db_user: "adempiere"
+db_password: "adempiere"  # CHANGE THIS!
+
+#############################################################################
+# Java Configuration
+#############################################################################
+# NixOS will set JAVA_HOME, but we define it explicitly for scripts
+java_home: "/run/current-system/sw"
+
+#############################################################################
+# Mail Configuration (optional)
+#############################################################################
+mail_host: "localhost"
+mail_user: ""
+mail_password: ""
+mail_admin: "admin@localhost"

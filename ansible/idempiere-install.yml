@@ -1,0 +1,288 @@
+---
+# idempiere-install.yml
+# Ansible playbook for iDempiere installation on NixOS
+# Based on: https://wiki.idempiere.org/en/Installing_from_Installers
+# Uses .deb artifacts and sed-based config from Debian installer
+#
+# Prerequisites:
+#   1. NixOS configured with idempiere-prerequisites.nix and rebuilt
+#   2. PostgreSQL service running
+#
+# Usage:
+#   ansible-playbook -i inventory.ini idempiere-install.yml -e "import_database=true"
+#
+# After this playbook completes:
+#   1. Add idempiere-service.nix to your configuration.nix imports
+#   2. Run: sudo nixos-rebuild switch
+
+- name: Install iDempiere ERP on NixOS
+  hosts: idempiere_servers
+  become: true
+  vars_files:
+    - vars/idempiere.yml
+
+  tasks:
+    #########################################################################
+    # Pre-flight checks
+    #########################################################################
+    - name: Verify PostgreSQL is running
+      ansible.builtin.systemd:
+        name: postgresql
+        state: started
+      register: postgres_status
+
+    - name: Verify Java is available
+      ansible.builtin.command: java -version
+      register: java_version
+      changed_when: false
+
+    - name: Display Java version
+      ansible.builtin.debug:
+        msg: "{{ java_version.stderr_lines }}"
+
+    #########################################################################
+    # Set PostgreSQL password
+    #########################################################################
+    - name: Set postgres user password
+      become_user: postgres
+      ansible.builtin.command: >
+        psql -c "ALTER USER postgres PASSWORD '{{ db_admin_password }}';"
+      changed_when: true
+      no_log: true
+
+    #########################################################################
+    # Download and extract iDempiere
+    #########################################################################
+    - name: Check if iDempiere is already extracted
+      ansible.builtin.stat:
+        path: "{{ idempiere_install_dir }}/idempiere-server.sh"
+      register: idempiere_extracted
+
+    - name: Create download directory
+      ansible.builtin.file:
+        path: "{{ idempiere_download_dir }}"
+        state: directory
+        owner: "{{ idempiere_user }}"
+        group: "{{ idempiere_group }}"
+        mode: '0755'
+      when: not idempiere_extracted.stat.exists
+
+    - name: Download iDempiere (this may take a while)
+      ansible.builtin.get_url:
+        url: "{{ idempiere_download_url }}"
+        dest: "{{ idempiere_download_dir }}/{{ idempiere_zip_file }}"
+        owner: "{{ idempiere_user }}"
+        group: "{{ idempiere_group }}"
+        mode: '0644'
+        timeout: 600
+      when: not idempiere_extracted.stat.exists
+
+    - name: Extract iDempiere archive
+      ansible.builtin.unarchive:
+        src: "{{ idempiere_download_dir }}/{{ idempiere_zip_file }}"
+        dest: "{{ idempiere_download_dir }}"
+        remote_src: true
+        owner: "{{ idempiere_user }}"
+        group: "{{ idempiere_group }}"
+      when: not idempiere_extracted.stat.exists
+
+    - name: Move iDempiere files to install directory
+      ansible.builtin.shell: |
+        mv {{ idempiere_download_dir }}/idempiere.gtk.linux.x86_64/idempiere-server/* {{ idempiere_install_dir }}/
+      args:
+        creates: "{{ idempiere_install_dir }}/idempiere-server.sh"
+
+    - name: Set ownership of iDempiere directory
+      ansible.builtin.file:
+        path: "{{ idempiere_install_dir }}"
+        owner: "{{ idempiere_user }}"
+        group: "{{ idempiere_group }}"
+        recurse: true
+
+    #########################################################################
+    # Configure iDempiere using sed (from Debian installer init.d script)
+    #########################################################################
+    - name: Create idempiereEnv.properties from template
+      ansible.builtin.copy:
+        src: "{{ idempiere_install_dir }}/idempiereEnvTemplate.properties"
+        dest: "{{ idempiere_install_dir }}/idempiereEnv.properties"
+        remote_src: true
+        owner: "{{ idempiere_user }}"
+        group: "{{ idempiere_group }}"
+        mode: '0600'
+
+    - name: Configure IDEMPIERE_HOME
+      ansible.builtin.lineinfile:
+        path: "{{ idempiere_install_dir }}/idempiereEnv.properties"
+        regexp: '^IDEMPIERE_HOME=.*'
+        line: "IDEMPIERE_HOME={{ idempiere_install_dir }}"
+
+    - name: Configure JAVA_HOME
+      ansible.builtin.lineinfile:
+        path: "{{ idempiere_install_dir }}/idempiereEnv.properties"
+        regexp: '^JAVA_HOME=.*'
+        line: "JAVA_HOME={{ java_home }}"
+
+    - name: Configure ADEMPIERE_DB_PASSWORD
+      ansible.builtin.lineinfile:
+        path: "{{ idempiere_install_dir }}/idempiereEnv.properties"
+        regexp: '^ADEMPIERE_DB_PASSWORD=.*'
+        line: "ADEMPIERE_DB_PASSWORD={{ db_password }}"
+      no_log: true
+
+    - name: Configure ADEMPIERE_DB_SYSTEM
+      ansible.builtin.lineinfile:
+        path: "{{ idempiere_install_dir }}/idempiereEnv.properties"
+        regexp: '^ADEMPIERE_DB_SYSTEM=.*'
+        line: "ADEMPIERE_DB_SYSTEM={{ db_admin_password }}"
+      no_log: true
+
+    - name: Configure ADEMPIERE_WEB_PORT
+      ansible.builtin.lineinfile:
+        path: "{{ idempiere_install_dir }}/idempiereEnv.properties"
+        regexp: '^ADEMPIERE_WEB_PORT=.*'
+        line: "ADEMPIERE_WEB_PORT={{ idempiere_web_port }}"
+
+    - name: Configure ADEMPIERE_SSL_PORT
+      ansible.builtin.lineinfile:
+        path: "{{ idempiere_install_dir }}/idempiereEnv.properties"
+        regexp: '^ADEMPIERE_SSL_PORT=.*'
+        line: "ADEMPIERE_SSL_PORT={{ idempiere_ssl_port }}"
+
+    - name: Configure ADEMPIERE_APPS_SERVER
+      ansible.builtin.lineinfile:
+        path: "{{ idempiere_install_dir }}/idempiereEnv.properties"
+        regexp: '^ADEMPIERE_APPS_SERVER=.*'
+        line: "ADEMPIERE_APPS_SERVER=0.0.0.0"
+
+    - name: Configure ADEMPIERE_KEYSTORE
+      ansible.builtin.lineinfile:
+        path: "{{ idempiere_install_dir }}/idempiereEnv.properties"
+        regexp: '^ADEMPIERE_KEYSTORE=.*'
+        line: "ADEMPIERE_KEYSTORE={{ idempiere_install_dir }}/keystore/myKeystore"
+
+    #########################################################################
+    # Run Silent Setup
+    #########################################################################
+    - name: Run silent setup
+      become_user: "{{ idempiere_user }}"
+      ansible.builtin.command:
+        cmd: sh silent-setup-alt.sh
+        chdir: "{{ idempiere_install_dir }}"
+      environment:
+        JAVA_HOME: "{{ java_home }}"
+        IDEMPIERE_HOME: "{{ idempiere_install_dir }}"
+      register: silent_setup_result
+
+    - name: Display silent setup output
+      ansible.builtin.debug:
+        msg: "{{ silent_setup_result.stdout_lines }}"
+      when: silent_setup_result.stdout_lines is defined
+
+    - name: Verify silent setup succeeded (check jetty config)
+      ansible.builtin.shell: |
+        grep "{{ idempiere_web_port }}" {{ idempiere_install_dir }}/jettyhome/etc/jetty-http.xml
+      register: jetty_check
+      failed_when: jetty_check.rc != 0
+      changed_when: false
+
+    #########################################################################
+    # Database Setup (only on fresh install)
+    # Based on Debian installer: /etc/init.d/idempiere configure
+    #########################################################################
+    - name: Create adempiere database role
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: psql -c "CREATE ROLE adempiere SUPERUSER LOGIN PASSWORD '{{ db_password }}'"
+      when: import_database | default(false) | bool
+      register: create_role
+      changed_when: "'CREATE ROLE' in create_role.stdout"
+      failed_when: false  # Ignore if role already exists
+
+    - name: Import iDempiere database
+      become_user: "{{ idempiere_user }}"
+      ansible.builtin.shell:
+        cmd: echo "" | sh RUN_ImportIdempiere.sh
+        chdir: "{{ idempiere_install_dir }}/utils"
+      environment:
+        JAVA_HOME: "{{ java_home }}"
+        IDEMPIERE_HOME: "{{ idempiere_install_dir }}"
+      when: import_database | default(false) | bool
+      register: import_result
+
+    - name: Synchronize database
+      become_user: "{{ idempiere_user }}"
+      ansible.builtin.command:
+        cmd: sh RUN_SyncDB.sh
+        chdir: "{{ idempiere_install_dir }}/utils"
+      environment:
+        JAVA_HOME: "{{ java_home }}"
+        IDEMPIERE_HOME: "{{ idempiere_install_dir }}"
+      when: import_database | default(false) | bool
+      register: sync_result
+
+    - name: Sign database version
+      become_user: "{{ idempiere_user }}"
+      ansible.builtin.command:
+        cmd: sh sign-database-build-alt.sh
+        chdir: "{{ idempiere_install_dir }}"
+      environment:
+        JAVA_HOME: "{{ java_home }}"
+        IDEMPIERE_HOME: "{{ idempiere_install_dir }}"
+      when: import_database | default(false) | bool
+
+    - name: Set permissions on myEnvironment files
+      ansible.builtin.file:
+        path: "{{ idempiere_install_dir }}/utils/{{ item }}"
+        mode: '0700'
+      loop:
+        - myEnvironment.sh
+        - myEnvironment.bat
+      failed_when: false  # May not exist on all platforms
+
+    #########################################################################
+    # Verify Installation
+    #########################################################################
+    - name: Verify database connection
+      become_user: "{{ idempiere_user }}"
+      ansible.builtin.shell: |
+        PGPASSWORD={{ db_password }} psql -d idempiere -U adempiere -h localhost -p 5432 -c ''
+      when: import_database | default(false) | bool
+      no_log: true
+      register: db_connection
+      failed_when: db_connection.rc != 0
+
+    - name: Verify database imported correctly
+      become_user: "{{ idempiere_user }}"
+      ansible.builtin.shell: |
+        PGPASSWORD={{ db_password }} psql -d idempiere -U adempiere -h localhost -p 5432 -c 'select count(*) from ad_system' | grep '1$'
+      when: import_database | default(false) | bool
+      no_log: true
+      register: db_verify
+      failed_when: db_verify.rc != 0
+
+    #########################################################################
+    # Installation complete - next steps
+    #########################################################################
+    - name: Display next steps
+      ansible.builtin.debug:
+        msg:
+          - "=============================================="
+          - "iDempiere installation complete!"
+          - "=============================================="
+          - ""
+          - "Next steps:"
+          - "  1. Add idempiere-service.nix to your configuration.nix:"
+          - "     imports = ["
+          - "       ./idempiere-prerequisites.nix"
+          - "       ./idempiere-service.nix"
+          - "     ];"
+          - ""
+          - "  2. Rebuild NixOS:"
+          - "     sudo nixos-rebuild switch"
+          - ""
+          - "  3. Access iDempiere at:"
+          - "     http://{{ ansible_host }}:{{ idempiere_web_port }}/webui/"
+          - ""
+          - "  4. Default login: GardenAdmin / GardenAdmin"
+          - "=============================================="
