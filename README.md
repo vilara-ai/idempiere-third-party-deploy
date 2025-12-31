@@ -27,7 +27,7 @@ Note: the install can take up to 10 minutes.
 
 ## Running Commands in the Container
 
-Commands like `psqli` and service management should be run as the `idempiere` user (which has the `.pgpass` credentials configured):
++Commands like `psqli` **must** be run inside the container as the `idempiere` user (which has the `.pgpass` credentials configured). They will not work from the host or as root.
 
 ```bash
 # Interactive shell as idempiere user
@@ -35,7 +35,7 @@ incus exec id-01 -- su --login idempiere
 
 # Run a single command as idempiere user
 incus exec id-01 -- su --login idempiere -c "psqli"
-incus exec id-01 -- su --login idempiere -c "psqli -c 'SELECT * FROM ad_system'"
+incus exec id-01 -- su - idempiere -c "psqli -c \"SELECT c_bpartner_id, value, name FROM c_bpartner ORDER BY name\""
 
 # Check service status
 incus exec id-01 -- systemctl status idempiere
