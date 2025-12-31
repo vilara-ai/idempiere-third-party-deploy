@@ -8,15 +8,15 @@ Based on the official guide: https://wiki.idempiere.org/en/Installing_iDempiere
 
 ```bash
 # Create NixOS container
-incus launch images:nixos/25.11 id-01 \
+incus launch images:nixos/25.11 id-xx \
   -c security.nesting=true \
   -c limits.memory=4GiB \
   -c limits.cpu=2 \
   -d root,size=20GiB
 
 # Push repo and run installer
-incus file push -r . id-01/opt/idempiere-install/
-incus exec id-01 -- /opt/idempiere-install/install.sh
+incus file push -r . id-xx/opt/idempiere-install/
+incus exec id-xx -- /opt/idempiere-install/install.sh
 
 Note: the install can take up to 10 minutes.
 
@@ -31,17 +31,17 @@ Note: the install can take up to 10 minutes.
 
 ```bash
 # Interactive shell as idempiere user
-incus exec id-01 -- su --login idempiere
+incus exec id-xx -- su --login idempiere
 
 # Run a single command as idempiere user
-incus exec id-01 -- su --login idempiere -c "psqli"
-incus exec id-01 -- su - idempiere -c "psqli -c \"SELECT c_bpartner_id, value, name FROM c_bpartner ORDER BY name\""
+incus exec id-xx -- su --login idempiere -c "psqli"
+incus exec id-xx -- su - idempiere -c "psqli -c \"SELECT c_bpartner_id, value, name FROM c_bpartner ORDER BY name\""
 
 # Check service status
-incus exec id-01 -- systemctl status idempiere
+incus exec id-xx -- systemctl status idempiere
 
 # View logs
-incus exec id-01 -- journalctl -u idempiere -f
+incus exec id-xx -- journalctl -u idempiere -f
 ```
 
 ## Architecture
