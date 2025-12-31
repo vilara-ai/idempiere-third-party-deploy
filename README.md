@@ -18,6 +18,8 @@ incus launch images:nixos/25.11 id-01 \
 incus file push -r . id-01/opt/idempiere-install/
 incus exec id-01 -- /opt/idempiere-install/install.sh
 
+Note: the install can take up to 10 minutes.
+
 # Access iDempiere
 # Web UI: http://<container-ip>:8080/webui/
 # REST API: http://<container-ip>:8080/api/v1/
@@ -27,8 +29,8 @@ incus exec id-01 -- /opt/idempiere-install/install.sh
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                              NixOS                                       │
-│                                                                          │
+│                              NixOS                                      │
+│                                                                         │
 │  Phase 1: idempiere-prerequisites.nix                                   │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
 │  │  - OpenJDK 17                                                     │  │
@@ -39,8 +41,8 @@ incus exec id-01 -- /opt/idempiere-install/install.sh
 │  │  - idempiere user/group                                           │  │
 │  │  - /opt/idempiere-server directory                                │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
-│                                 │                                        │
-│                                 ▼                                        │
+│                                 │                                       │
+│                                 ▼                                       │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
 │  │  Ansible (idempiere-install.yml)                                  │  │
 │  │  - Download iDempiere 12 from SourceForge                         │  │
@@ -52,14 +54,14 @@ incus exec id-01 -- /opt/idempiere-install/install.sh
 │  │  - Sign database (sign-database-build-alt.sh)                     │  │
 │  │  - Install REST API plugin (update-prd.sh)                        │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
-│                                 │                                        │
-│                                 ▼                                        │
+│                                 │                                       │
+│                                 ▼                                       │
 │  Phase 2: idempiere-service.nix                                         │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
 │  │  - systemd service definition                                     │  │
 │  │  - Service starts automatically                                   │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
-│                                                                          │
+│                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
