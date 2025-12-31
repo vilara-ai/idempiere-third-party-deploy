@@ -4,53 +4,23 @@ Simple iDempiere ERP installation using NixOS for system configuration and Ansib
 
 Based on the official guide: https://wiki.idempiere.org/en/Installing_iDempiere
 
-## Quick Start: Create Test Instance with Incus
+## Quick Start
 
 ```bash
-# Create NixOS container with nesting enabled
+# Create NixOS container
 incus launch images:nixos/25.11 id-01 \
   -c security.nesting=true \
   -c limits.memory=4GiB \
   -c limits.cpu=2 \
   -d root,size=20GiB
 
-# Copy configuration files
-incus file push idempiere-prerequisites.nix id-01/etc/nixos/
-incus file push idempiere-service.nix id-01/etc/nixos/
-incus file push -r ansible id-01/root/
+# Push repo and run installer
+incus file push -r . id-01/opt/idempiere-install/
+incus exec id-01 -- /opt/idempiere-install/install.sh
 
-# Add prerequisites import to configuration.nix
-incus exec id-01 -- sed -i 's|./incus.nix|./incus.nix\n    ./idempiere-prerequisites.nix|' /etc/nixos/configuration.nix
-
-# Rebuild NixOS (takes 1-2 minutes on first run)
-# NOTE FOR CLAUDE: Use run_in_background=true for this command to preserve context
-incus exec id-01 -- sudo nixos-rebuild switch
-
-# Edit passwords before running Ansible!
-incus exec id-01 -- nano /root/ansible/vars/idempiere.yml
-
-# Run Ansible playbook (downloads ~500MB, takes several minutes)
-incus exec id-01 -- bash -c "cd /root/ansible && ansible-playbook -i inventory.ini idempiere-install.yml -e 'import_database=true' --connection=local"
-
-# Add service import and rebuild to enable systemd service
-incus exec id-01 -- sed -i 's|./idempiere-prerequisites.nix|./idempiere-prerequisites.nix\n    ./idempiere-service.nix|' /etc/nixos/configuration.nix
-incus exec id-01 -- sudo nixos-rebuild switch
-
-# Check service status
-incus exec id-01 -- systemctl status idempiere
-
-# Expose iDempiere web interface (container:8080 → host:8081)
-incus config device add id-01 myproxy proxy listen=tcp:0.0.0.0:8081 connect=tcp:127.0.0.1:8080
-
-# Option A: Open firewall (if using UFW)
-sudo ufw allow 8081/tcp
-# Access Web UI at http://<server-ip>:8081/webui/
-# Access REST API at http://<server-ip>:8081/api/v1/
-
-# Option B: SSH tunnel (no firewall changes needed)
-ssh -L 8081:localhost:8081 user@<server-ip>
-# Access Web UI at http://localhost:8081/webui/
-# Access REST API at http://localhost:8081/api/v1/
+# Access iDempiere
+# Web UI: http://<container-ip>:8080/webui/
+# REST API: http://<container-ip>:8080/api/v1/
 ```
 
 ## Architecture
@@ -97,6 +67,7 @@ ssh -L 8081:localhost:8081 user@<server-ip>
 
 ```
 .
+├── install.sh                       # Automated installer (runs all phases)
 ├── idempiere-prerequisites.nix      # Phase 1: System prerequisites
 ├── idempiere-service.nix            # Phase 2: systemd service (add after Ansible)
 ├── ansible/
